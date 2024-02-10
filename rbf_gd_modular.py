@@ -32,11 +32,8 @@ x=np.linspace(-1.,1.,n)
 y=np.linspace(-1.,1.,n)
 nd=n**2
 xcoord=np.zeros((nd,2))
-k=0
-for i in range(n):
-    for j in range(n):
-        xcoord[k,:]=np.array([x[i],y[j]])
-        k+=1
+xx, yy = np.meshgrid(x, y)
+xcoord = np.column_stack((xx.ravel(), yy.ravel()))
 
 def rbf(x,xs):
     c=0.1
