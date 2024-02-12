@@ -16,6 +16,9 @@ https://doi.org/10.3390/electronics9111809
 https://link.springer.com/article/10.1007/s10898-022-01205-4
 https://www.sciencedirect.com/science/article/pii/S0893608020303579
 
+https://pypi.org/project/ncg-optimizer/#description
+https://www.cs.ubc.ca/~schmidtm/Software/minFunc.html
+
 Why should you have special training of RBF NN? "In this article, we describe a modern gradient-based RBFN implementation based on the same computational machinery that is used in modern deep learning. While gradient-based methods for training RBFN’s have been criticized (Chen, Cowan, & Grant, 1991) because of local optima, tailored training methods have been used in the past with good results"
 
 
