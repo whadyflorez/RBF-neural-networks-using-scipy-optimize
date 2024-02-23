@@ -100,7 +100,9 @@ p = (b-a)*p+a
 
 
 # Definir el optimizador y closure para algunos
-optimizer = optim.BASIC([p],method='CD',line_search='Strong_Wolfe', lr=1.0e-1)
+#https://github.com/RyunMi/NCG-Optimizer/tree/master
+optimizer = optim.BASIC([p],method='FR',line_search='Armijo', lr=1.0e-2)
+#optimizer = optim.BASIC([p],method='LS', lr=1.0e-2)
 def closure():
     optimizer.zero_grad()
     loss_val=loss(p,arr.tolist())
