@@ -14,7 +14,6 @@ Original file is located at
 import torch
 import torch.optim as optim
 
-
 n=10
 x=torch.linspace(-1.,1.,n)
 y=torch.linspace(-1.,1.,n)
@@ -112,28 +111,38 @@ p = (b-a)*torch.randn(nd)+a
 
 
 # Definir el optimizador
-#common optimizers in pytorch fail and are too slow
 #optimizer = optim.SGD([p], lr=1.0e-4, momentum=0.9)
-#optimizer = optim.RMSprop([p], lr=1.0e-2, momentum=0.9)
-#optimizer = optim.ASGD([p], lr=1.0e-4)
-#optimizer = optim.NAdam([p], lr=1.0e-3)
-#optimizer = optim.Rprop([p], lr=1.0e-3)
-optimizer = optim.Adadelta([p], lr=1.0)
+#optimizer = optim.RMSprop([p], lr=1.0e-4, momentum=0.9)
+optimizer = optim.LBFGS([p], lr=1.0e-2,max_iter=10,history_size=100)
+
+# Función para realizar un paso de optimización con LBFGS
+def closure():
+    optimizer.zero_grad()
+    arr=torch.randperm(nd)
+    ibatch=arr[0:batch_size]
+    optimizer.zero_grad()
+    p_grad=grad(p,ibatch)
+    p.grad = p_grad.reshape_as(p)
+    lossval = loss(p,arr.tolist())
+    return lossval
 
 # Ciclo de entrenamiento
-max_iter = 100000
-batch_size =nd
+max_iter = 1000
+batch_size = 30
 
 arr=torch.randperm(nd)
 ibatch=arr[0:batch_size]
 
 
 for i in range(max_iter):
-    optimizer.zero_grad()
-    p_grad=grad(p,ibatch)
-    p.grad = p_grad 
-    loss_val=loss(p,arr.tolist())
-    optimizer.step()
+#    p_grad=grad(p,ibatch)
+#    optimizer.zero_grad()
+#    p.grad = p_grad.reshape_as(p)
+#    loss_val=loss(p,arr.tolist())
+    optimizer.step(closure)
+    arr=torch.randperm(nd)
+    ibatch=arr[0:batch_size]
+    loss_val=closure()
     print(f'iteration {i}, Loss: {loss_val.item()}')
 
 
