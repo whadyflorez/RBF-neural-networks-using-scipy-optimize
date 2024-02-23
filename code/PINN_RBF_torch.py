@@ -99,75 +99,50 @@ def loss(p,*args):
 
 def grad(p,*args):
    ibatch=args[0]
-   gradbatch = torch.zeros_like(p)
-   for i in ibatch:
-       gradbatch+=(torch.dot(A[i,:],p)-z[i])*A[i,:]
+   with torch.no_grad():
+       gradbatch = torch.zeros_like(p)
+       for i in ibatch:
+           gradbatch+=(torch.dot(A[i,:],p)-z[i])*A[i,:]
    return gradbatch   
-        
 
-# # Función para definir el modelo
-# def simple_model(x, weights, bias):
-#     return torch.matmul(x, weights) + bias
+# Inicializar los parámetros del modelo
+a,b=-1.0,1.0
+p = (b-a)*torch.randn(nd)+a
 
-# # Función de pérdida personalizada
-# def custom_loss(y_pred, y_true):
-#     return torch.mean((y_pred - y_true) ** 2)
 
-# # Función para calcular los gradientes manualmente de forma analítica
-# def calculate_gradients(x, y, weights, bias):
-#     with torch.no_grad():
-#         gradient = torch.mean(2 * (simple_model(x, weights, bias) - y) * x, dim=0)
-#         bias_gradient = torch.mean(2 * (simple_model(x, weights, bias) - y))
+# Definir el optimizador
+#optimizer = optim.SGD([p], lr=1.0e-4, momentum=0.9)
+#optimizer = optim.RMSprop([p], lr=1.0e-4, momentum=0.9)
+optimizer = optim.LBFGS([p], lr=1.0e-2,max_iter=10,history_size=100)
 
-#     return gradient, bias_gradient
+# Función para realizar un paso de optimización con LBFGS
+def closure():
+    optimizer.zero_grad()
+    arr=torch.randperm(nd)
+    ibatch=arr[0:batch_size]
+    optimizer.zero_grad()
+    p_grad=grad(p,ibatch)
+    p.grad = p_grad.reshape_as(p)
+    lossval = loss(p,arr.tolist())
+    return lossval
 
-# # Inicializar los parámetros del modelo
-# weights = torch.randn(1, 1, requires_grad=True)
-# bias = torch.randn(1, requires_grad=True)
+# Ciclo de entrenamiento
+max_iter = 1000
+batch_size = 30
 
-# # Datos de ejemplo
-# x_train = torch.tensor([[1.0], [2.0], [3.0], [4.0], [5.0]])
-# y_train = torch.tensor([[2.0], [4.0], [6.0], [8.0], [10.0]])
+arr=torch.randperm(nd)
+ibatch=arr[0:batch_size]
 
-# # Definir el optimizador
-# #optimizer = optim.SGD([weights, bias], lr=0.1)
-# optimizer = optim.SGD([weights, bias], lr=0.01, momentum=0.9)
 
-# # Ciclo de entrenamiento
-# epochs = 200
-# batch_size = 3
-# num_batches = len(x_train) // batch_size
+for i in range(max_iter):
+#    p_grad=grad(p,ibatch)
+#    optimizer.zero_grad()
+#    p.grad = p_grad.reshape_as(p)
+#    loss_val=loss(p,arr.tolist())
+    optimizer.step(closure)
+    arr=torch.randperm(nd)
+    ibatch=arr[0:batch_size]
+    loss_val=closure()
+    print(f'iteration {i}, Loss: {loss_val.item()}')
 
-# for epoch in range(epochs):
-#     # Iterar sobre los lotes de datos
-#     for i in range(num_batches):
-#         start_idx = i * batch_size
-#         end_idx = start_idx + batch_size
 
-#         # Obtener el lote actual
-#         x_batch = x_train[start_idx:end_idx]
-#         y_batch = y_train[start_idx:end_idx]
-
-#         # Paso de adelante: Calcular la predicción y la pérdida
-#         y_pred = simple_model(x_batch, weights, bias)
-#         loss = custom_loss(y_pred, y_batch)
-
-#         # Calcular los gradientes manualmente de forma analítica
-#         weight_gradient, bias_gradient = calculate_gradients(x_batch, y_batch, weights, bias)
-
-#         # Actualizar los parámetros del modelo utilizando el optimizador
-#         optimizer.zero_grad()
-#         weights.grad = weight_gradient.reshape_as(weights)
-#         bias.grad = bias_gradient.reshape_as(bias)
-#         optimizer.step()
-
-#     # Imprimir la pérdida
-#     if (epoch+1) % 10 == 0:
-#         print(f'Epoch [{epoch+1}/{epochs}], Loss: {loss.item()}')
-
-# # Evaluar el modelo entrenado
-# with torch.no_grad():
-#     print("Predicciones después del entrenamiento:")
-#     y_pred = simple_model(x_train, weights, bias)
-#     for i, (predicted, true) in enumerate(zip(y_pred, y_train)):
-#         print(f'Entrada: {x_train[i].item()}, Predicción: {predicted.item()}, Valor real: {true.item()}')
