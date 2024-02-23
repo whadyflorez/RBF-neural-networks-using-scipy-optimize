@@ -13,6 +13,7 @@ Original file is located at
 
 import torch
 import torch.optim as optim
+import numpy as np
 
 n=10
 x=torch.linspace(-1.,1.,n)
@@ -112,7 +113,7 @@ p = (b-a)*p+a
 p.requires_grad=True
 
 # Definir el optimizador
-optimizer = optim.LBFGS([p], lr=1.0e-3,history_size=10,max_iter=4,line_search_fn='strong_wolfe' )
+optimizer = optim.LBFGS([p], lr=1.0,history_size=10,max_iter=5,line_search_fn='strong_wolfe' )
 
 # Función para realizar un paso de optimización con LBFGS
 def closure():
@@ -134,7 +135,7 @@ for i in range(max_iter):
     optimizer.step(closure)
     arr=torch.randperm(nd)
     ibatch=arr[0:batch_size]
-    loss_val=closure()
+    loss_val=closure()    
     print(f'iteration {i}, Loss: {loss_val.item()}')
     
  
