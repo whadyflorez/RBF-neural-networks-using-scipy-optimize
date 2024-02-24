@@ -56,17 +56,19 @@ def drbf(x,xs):
     dfdy=(x[1]-xs[1])/rbf(x,xs)   
     return dfdx,dfdy
 
-z=torch.zeros(nd)
-A=torch.zeros(nd,nd)
+z=torch.zeros(nd+1)
+A=torch.zeros(nd+1,nd+1)
 
 
 for i in f1:
     for j in range(nd):  
         A[i,j]=rbf(xcoord[i],xcoord[j])
+    A[i,nd]=1.0
     z[i]=1.0
 for i in f4:
     for j in range(nd):  
         A[i,j]=rbf(xcoord[i],xcoord[j])
+    A[i,nd]=1.0
     z[i]=1.0  
 for i in f2:
     for j in range(nd):  
@@ -80,14 +82,16 @@ for i in f5:
     for j in range(nd):  
         A[i,j]=laplace_rbf(xcoord[i],xcoord[j])
     z[i]=-1000.0   
+A[nd,0:nd]=1.0    
         
 #AT=torch.t(A)
 torch.manual_seed(1000)     
 
 def model(x,p):
-    fiv=torch.zeros(nd)
+    fiv=torch.zeros(nd+1)
     for i in range(nd):
         fiv[i]=rbf(x,xcoord[i])
+    fiv[nd]=1.0    
     y=torch.dot(p,fiv)
     return y    
         
@@ -108,12 +112,12 @@ def grad(p,*args):
 
 # Inicializar los parámetros del modelo
 a,b=-1.0,1.0
-p = torch.randn(nd)
+p = torch.randn(nd+1)
 p = (b-a)*p+a
 p.requires_grad=True
 
 # Definir el optimizador
-optimizer = optim.LBFGS([p], lr=1.0,history_size=10,max_iter=5,line_search_fn='strong_wolfe' )
+optimizer = optim.LBFGS([p], lr=1.0,history_size=10,max_iter=10,line_search_fn='strong_wolfe' )
 
 # Función para realizar un paso de optimización con LBFGS
 def closure():
@@ -124,16 +128,16 @@ def closure():
     return loss_val
 
 # Ciclo de entrenamiento
-max_iter = 1000
-batch_size =nd
+max_iter = 2000
+batch_size =int((nd+1))
 
-arr=torch.randperm(nd)
+arr=torch.randperm(nd+1)
 ibatch=arr[0:batch_size]
 
 
 for i in range(max_iter):
     optimizer.step(closure)
-    arr=torch.randperm(nd)
+    arr=torch.randperm(nd+1)
     ibatch=arr[0:batch_size]
     loss_val=closure()    
     print(f'iteration {i}, Loss: {loss_val.item()}')
