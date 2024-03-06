@@ -14,6 +14,9 @@ Original file is located at
 import torch
 import torch.optim as optim
 import numpy as np
+import pytorch_soo as soo
+from pytorch_soo.line_search_spec import LineSearchSpec
+
 
 n=10
 x=torch.linspace(-1.,1.,n)
@@ -40,7 +43,7 @@ for i in range(nd):
     if xcoord[i,0]<1.0 and xcoord[i,1]>-1.0 and xcoord[i,1]<1.0 and xcoord[i,0]>-1.0:
         f5.append(i)#internal
 
-c=0.1
+c=0.01
 def rbf(x,xs):
     r=torch.norm(x-xs)
     y=torch.sqrt(r**2+c**2)
@@ -111,15 +114,19 @@ def grad(p,*args):
    return gradbatch   
 
 # Inicializar los parámetros del modelo
-a,b=-1.0,1.0
+a,b=0.0,1.0
 p = torch.randn(nd+1)
 p = (b-a)*p+a
-p.requires_grad=True
+#p.requires_grad=True
 
 # Definir el optimizador
-optimizer = optim.LBFGS([p], lr=1.0,history_size=10,max_iter=10,line_search_fn='strong_wolfe' )
+optimizer = optim.LBFGS([p], lr=0.01,history_size=100,max_iter=20,max_eval=200,\
+                        line_search_fn='strong_wolfe' )
+#optimizer = soo.HFCR_Newton([p],max_cr=50,max_newton=10)
+#optimizer = optim.RMSprop([p],lr=0.01)
 
-# Función para realizar un paso de optimización con LBFGS
+
+    # Función para realizar un paso de optimización con LBFGS
 def closure():
     optimizer.zero_grad()
     loss_val=loss(p,arr.tolist())
@@ -128,12 +135,11 @@ def closure():
     return loss_val
 
 # Ciclo de entrenamiento
-max_iter = 2000
+max_iter = 10000
 batch_size =int((nd+1))
 
 arr=torch.randperm(nd+1)
 ibatch=arr[0:batch_size]
-
 
 for i in range(max_iter):
     optimizer.step(closure)
@@ -141,8 +147,6 @@ for i in range(max_iter):
     ibatch=arr[0:batch_size]
     loss_val=closure()    
     print(f'iteration {i}, Loss: {loss_val.item()}')
-    
  
-    
 
 

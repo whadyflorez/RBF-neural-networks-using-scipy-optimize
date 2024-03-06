@@ -130,7 +130,7 @@ def loss(p):
 def grad(p):
    ATA=np.matmul(AT,A)
    ATB=np.matmul(AT,z)
-   y=2.0*(np.matmul(ATA,p)-ATB)
+   y=(np.matmul(ATA,p)-ATB)
    return y
 
 
@@ -144,7 +144,7 @@ def callback(xk):
     print('loss',loss(xk))
     return
 
-options={'maxiter':100000}    
+options={'maxiter':200000,'maxfun':600000}    
 sol=minimize(loss,xk,method='BFGS',jac=grad,callback=callback,options=options)
 print('success',sol.success)
 print(sol.message)
