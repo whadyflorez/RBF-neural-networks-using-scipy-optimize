@@ -35,6 +35,7 @@ xcoord=np.zeros((nd,2))
 xx, yy = np.meshgrid(x, y)
 xcoord = np.column_stack((xx.ravel(), yy.ravel()))
 
+
 f1=[]
 f2=[]
 f3=[]
@@ -80,9 +81,6 @@ z=np.zeros(nd)
 
 A=np.zeros((nd,nd))
 
-for i in range(nd):
-    for j in range(nd):
-        A[i,j]=rbf(xcoord[i],xcoord[j])
 
 for i in f1:
     for j in range(nd):  
@@ -160,7 +158,6 @@ for i in range(n):
 for i in range(n):
   for j in range(n):
     xp=np.array([xplot[i,j],yplot[i,j]])
-    zplot[i,j]=paraboloid(xp)
     zplotmodel[i,j]=model(xp,sol.x)
 
 

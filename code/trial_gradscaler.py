@@ -16,15 +16,18 @@ import torch.optim as optim
 import numpy as np
 import pytorch_soo as soo
 from pytorch_soo.line_search_spec import LineSearchSpec
+import matplotlib.pyplot as plt
 
 
-n=10
-x=torch.linspace(-1.,1.,n)
-y=torch.linspace(-1.,1.,n)
-nd=n**2
-xcoord=torch.zeros(nd,2)
+n = 10
+nd = n**2
+x = torch.linspace(-1., 1., n)
+y = torch.linspace(-1., 1., n)
+# Crear una cuadrícula de coordenadas
 xx, yy = torch.meshgrid(x, y)
-xcoord = torch.column_stack((xx.ravel(), yy.ravel()))
+# Apilar las coordenadas en un tensor 2D
+xcoord = torch.stack((xx.flatten(), yy.flatten()), dim=1)
+
 
 f1=[]
 f2=[]
@@ -43,58 +46,65 @@ for i in range(nd):
     if xcoord[i,0]<1.0 and xcoord[i,1]>-1.0 and xcoord[i,1]<1.0 and xcoord[i,0]>-1.0:
         f5.append(i)#internal
 
-c=np.sqrt(8.0)
+c=0.1
+sigma=0.25
+
 def rbf(x,xs):
     r=torch.norm(x-xs)
-    y=torch.sqrt(r**2+c**2)
+#    y=torch.sqrt(r**2+c**2)
+    y = torch.exp(-(r**2) / (2 * sigma**2))
     return y
 
 def laplace_rbf(x,xs):
     r=torch.norm(x-xs)
-    y=(2.0*c**2+r**2)/rbf(x,xs)**3
+#    y=(2.0*c**2+r**2)/rbf(x,xs)**3
+    exp_term = torch.exp(-(r**2) / (2 * sigma**2))
+    y = (r**2 / sigma**4 - 2.0/sigma**2) * exp_term
     return y    
 
 def drbf(x,xs):
-    dfdx=(x[0]-xs[0])/rbf(x,xs)
-    dfdy=(x[1]-xs[1])/rbf(x,xs)   
+    r=torch.norm(x-xs)
+#    dfdx=(x[0]-xs[0])/rbf(x,xs)
+#    dfdy=(x[1]-xs[1])/rbf(x,xs) 
+    exp_term = torch.exp(-(r**2) / (2 * sigma**2))
+    dfdx = -((x[0] - xs[0]) / (sigma**2)) * exp_term
+    dfdy = -((x[1] - xs[1]) / (sigma**2)) * exp_term
     return dfdx,dfdy
 
-z=torch.zeros(nd+1)
-A=torch.zeros(nd+1,nd+1)
-
+z=torch.zeros(nd)
+A=torch.zeros(nd,nd)
 
 for i in f1:
     for j in range(nd):  
         A[i,j]=rbf(xcoord[i],xcoord[j])
-    A[i,nd]=1.0
-    z[i]=1.0
+        z[i]=1.0
 for i in f4:
     for j in range(nd):  
         A[i,j]=rbf(xcoord[i],xcoord[j])
-    A[i,nd]=1.0
-    z[i]=1.0  
+        z[i]=1.0  
 for i in f2:
     for j in range(nd):  
         A[i,j]=drbf(xcoord[i],xcoord[j])[0]
-    z[i]=0.0          
+        z[i]=0.0          
 for i in f3:
     for j in range(nd):  
         A[i,j]=drbf(xcoord[i],xcoord[j])[1]
-    z[i]=0.0    
+        z[i]=0.0    
 for i in f5:
     for j in range(nd):  
         A[i,j]=laplace_rbf(xcoord[i],xcoord[j])
-    z[i]=-1000.0   
-A[nd,0:nd]=1.0    
+        z[i]=-1000.0        
         
 #AT=torch.t(A)
-torch.manual_seed(1000)     
+torch.manual_seed(777)  
+
+#lam=1.0e-1
+#A=A+torch.eye(nd,nd)*lam
 
 def model(x,p):
-    fiv=torch.zeros(nd+1)
+    fiv=torch.zeros(nd)
     for i in range(nd):
         fiv[i]=rbf(x,xcoord[i])
-    fiv[nd]=1.0    
     y=torch.dot(p,fiv)
     return y    
         
@@ -114,48 +124,57 @@ def grad(p,*args):
    return gradbatch   
 
 # Inicializar los parámetros del modelo
-a,b=-0.5,0.5
-p = torch.rand(nd+1)
+a,b=-1.0,1.0
+p = torch.rand(nd)
 p = (b-a)*p+a
+#p=torch.linalg.solve(A,z)+10
 #p.requires_grad=True
 
-#define scales
-#s=torch.abs(p)
-#s=torch.where(s<=1.0e-6,1.0,s) 
-s=torch.ones_like(p)*10
 
 # Definir el optimizador
-#optimizer = optim.LBFGS([p],lr=1.0e-6,history_size=100,max_iter=100,max_eval=400,\
-#                        line_search_fn='strong_wolfe' )
-#optimizer = soo.HFCR_Newton([p],max_cr=50,max_newton=10)
-optimizer = optim.NAdam([p],lr=0.1)
+optimizer = optim.LBFGS([p],lr=1.0,history_size=100,max_iter=200,\
+ max_eval=400,line_search_fn=None )
+#optimizer = soo.HFCR_Newton([p],max_cr=100,max_newton=100)
+#optimizer = optim.NAdam([p],lr=0.01)
 
 
 
 # Función para realizar un paso de optimización con LBFGS
 def closure():
     optimizer.zero_grad()
-    loss_val=loss(p*s,arr.tolist())
-    p_grad=grad(p*s,ibatch)*s
+    loss_val=loss(p,arr.tolist())
+    p_grad=grad(p,ibatch)
     p.grad = p_grad
     return loss_val
 
 # Ciclo de entrenamiento
-max_iter = 10000
-batch_size =int((nd+1))
+max_iter = 100
+batch_size =int(100)
 
-arr=torch.randperm(nd+1)
+arr=torch.randperm(nd)
 ibatch=arr[0:batch_size]
 
 for i in range(max_iter):
     optimizer.step(closure)
-    arr=torch.randperm(nd+1)
+    arr=torch.randperm(nd)
     ibatch=arr[0:batch_size]
     loss_val=closure()  
     print(f'iteration {i}, Loss: {loss_val.item()}')
-    if np.mod(i,10)==0:
-        s=torch.abs(p*s)
+
+# # Plot the results
+xplot=np.zeros((n,n))
+yplot=np.zeros((n,n))
+zplotmodel=np.zeros((n,n))
+for i in range(n):
+  xplot[i,:]=x.numpy()
+  yplot[:,i]=y.numpy()
+for i in range(n):
+  for j in range(n):
+    xp=torch.tensor([xplot[i,j],yplot[i,j]])
+    zplotmodel[i,j]=model(xp,p)
 
 
+fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+surf = ax.plot_surface(xplot, yplot, zplotmodel)
 
 
