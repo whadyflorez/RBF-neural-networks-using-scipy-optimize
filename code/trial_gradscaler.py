@@ -21,12 +21,12 @@ import matplotlib.pyplot as plt
 
 n = 10
 nd = n**2
-x = torch.linspace(-1., 1., n)
-y = torch.linspace(-1., 1., n)
+x = torch.linspace(-1., 1., n).double()
+y = torch.linspace(-1., 1., n).double()
 # Crear una cuadrícula de coordenadas
 xx, yy = torch.meshgrid(x, y)
 # Apilar las coordenadas en un tensor 2D
-xcoord = torch.stack((xx.flatten(), yy.flatten()), dim=1)
+xcoord = torch.stack((xx.flatten(), yy.flatten()), dim=1).double()
 
 
 f1=[]
@@ -47,32 +47,31 @@ for i in range(nd):
         f5.append(i)#internal
 
 c=0.1
-sigma=0.25
 
 def rbf(x,xs):
     r=torch.norm(x-xs)
-#    y=torch.sqrt(r**2+c**2)
-    y = torch.exp(-(r**2) / (2 * sigma**2))
+    y=torch.sqrt(r**2+c**2)
+#    y = torch.exp(-r**2/c**2)
     return y
 
 def laplace_rbf(x,xs):
     r=torch.norm(x-xs)
-#    y=(2.0*c**2+r**2)/rbf(x,xs)**3
-    exp_term = torch.exp(-(r**2) / (2 * sigma**2))
-    y = (r**2 / sigma**4 - 2.0/sigma**2) * exp_term
+    y=(2.0*c**2+r**2)/rbf(x,xs)**3
+#    exp_term = torch.exp(-r**2/c**2)
+#    y = (4.0*r**2 / c**4 - 4.0/c**2) * exp_term
     return y    
 
 def drbf(x,xs):
-    r=torch.norm(x-xs)
-#    dfdx=(x[0]-xs[0])/rbf(x,xs)
-#    dfdy=(x[1]-xs[1])/rbf(x,xs) 
-    exp_term = torch.exp(-(r**2) / (2 * sigma**2))
-    dfdx = -((x[0] - xs[0]) / (sigma**2)) * exp_term
-    dfdy = -((x[1] - xs[1]) / (sigma**2)) * exp_term
+    r=torch.norm(x-xs).double()
+    dfdx=(x[0]-xs[0])/rbf(x,xs)
+    dfdy=(x[1]-xs[1])/rbf(x,xs) 
+#    exp_term = torch.exp(-r**2 / c**2)
+#    dfdx = -2.0*(x[0] - xs[0]) / c**2 * exp_term
+#    dfdy = -2.0*(x[1] - xs[1]) / c**2 * exp_term
     return dfdx,dfdy
 
-z=torch.zeros(nd)
-A=torch.zeros(nd,nd)
+z=torch.zeros(nd).double()
+A=torch.zeros(nd,nd).double()
 
 for i in f1:
     for j in range(nd):  
@@ -98,11 +97,11 @@ for i in f5:
 #AT=torch.t(A)
 torch.manual_seed(777)  
 
-#lam=1.0e-1
+#lam=1.0
 #A=A+torch.eye(nd,nd)*lam
 
 def model(x,p):
-    fiv=torch.zeros(nd)
+    fiv=torch.zeros(nd).double()
     for i in range(nd):
         fiv[i]=rbf(x,xcoord[i])
     y=torch.dot(p,fiv)
@@ -125,17 +124,17 @@ def grad(p,*args):
 
 # Inicializar los parámetros del modelo
 a,b=-1.0,1.0
-p = torch.rand(nd)
+p = torch.rand(nd).double()
 p = (b-a)*p+a
 #p=torch.linalg.solve(A,z)+10
 #p.requires_grad=True
 
 
 # Definir el optimizador
-optimizer = optim.LBFGS([p],lr=1.0,history_size=100,max_iter=200,\
- max_eval=400,line_search_fn=None )
+#optimizer = optim.LBFGS([p],lr=0.01,history_size=100,max_iter=10,\
+# max_eval=40,line_search_fn=None )
 #optimizer = soo.HFCR_Newton([p],max_cr=100,max_newton=100)
-#optimizer = optim.NAdam([p],lr=0.01)
+optimizer = optim.NAdam([p],lr=0.1)
 
 
 
@@ -148,18 +147,21 @@ def closure():
     return loss_val
 
 # Ciclo de entrenamiento
-max_iter = 100
-batch_size =int(100)
+max_iter = 10000
+batch_size =10
 
 arr=torch.randperm(nd)
 ibatch=arr[0:batch_size]
 
 for i in range(max_iter):
     optimizer.step(closure)
-    arr=torch.randperm(nd)
-    ibatch=arr[0:batch_size]
+    if np.mod(i,100)==0:
+        arr=torch.randperm(nd)
+        ibatch=arr[0:batch_size]
     loss_val=closure()  
     print(f'iteration {i}, Loss: {loss_val.item()}')
+
+#p=torch.linalg.solve(A,z) #para comparar
 
 # # Plot the results
 xplot=np.zeros((n,n))
