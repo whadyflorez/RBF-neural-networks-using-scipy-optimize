@@ -28,6 +28,7 @@ from scipy.optimize import basinhopping
 from matplotlib import cm
 from matplotlib.ticker import LinearLocator
 
+
 n=40
 x=np.linspace(-1.,1.,n)
 y=np.linspace(-1.,1.,n)
@@ -151,7 +152,8 @@ kwargsbasin={'tol':1.0e-6}
 
 #options={'maxiter':200000,'maxfun':600000}    
 #sol=minimize(loss,xk,method='BFGS',jac=grad,callback=callback,options=options)
-sol=basinhopping(loss, xk,niter=5,minimizer_kwargs=None,callback=None,disp=True)
+sol=basinhopping(loss, xk,niter=5,stepsize=10.0,\
+                 minimizer_kwargs=None,callback=None,disp=True)
 print('success',sol.success)
 print(sol.message)
 print('loss',loss(sol.x))

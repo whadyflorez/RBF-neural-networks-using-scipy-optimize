@@ -17,6 +17,7 @@ import numpy as np
 import pytorch_soo as soo
 from pytorch_soo.line_search_spec import LineSearchSpec
 import matplotlib.pyplot as plt
+import sa
 
 
 n = 10
@@ -131,10 +132,10 @@ p = (b-a)*p+a
 
 
 # Definir el optimizador
-#optimizer = optim.LBFGS([p],lr=0.01,history_size=100,max_iter=10,\
-# max_eval=40,line_search_fn=None )
-#optimizer = soo.HFCR_Newton([p],max_cr=100,max_newton=100)
-optimizer = optim.NAdam([p],lr=0.1)
+optimizer = optim.LBFGS([p],lr=0.01,history_size=100,max_iter=10,\
+ max_eval=40,line_search_fn=None )
+#optimizer = soo.HFCR_Newton([p],max_cr=50,max_newton=50)
+#optimizer = optim.NAdam([p],lr=0.1)
 
 
 
@@ -147,15 +148,15 @@ def closure():
     return loss_val
 
 # Ciclo de entrenamiento
-max_iter = 10000
-batch_size =10
+max_iter = 100
+batch_size =100
 
 arr=torch.randperm(nd)
 ibatch=arr[0:batch_size]
 
 for i in range(max_iter):
     optimizer.step(closure)
-    if np.mod(i,100)==0:
+    if np.mod(i,2)==0:
         arr=torch.randperm(nd)
         ibatch=arr[0:batch_size]
     loss_val=closure()  
