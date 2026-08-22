@@ -56,7 +56,7 @@ for i in range(nd):
         f5.append(i)#internal
        
 
-c=0.1
+c=1.0/40.0
 def rbf(x,xs):
     r=np.linalg.norm(x-xs)
     y=np.sqrt(r**2+c**2)
@@ -148,12 +148,16 @@ def callbackbasin(x,f,accept):
     print('loss',f,'accept:',accept)
     return
 
-kwargsbasin={'tol':1.0e-6}
+kwargsbasin={'method':'BFGS'}
+def accept_test(f_new, x_new, f_old, x_old):
+    return 'force accept'
+    
 
-#options={'maxiter':200000,'maxfun':600000}    
-#sol=minimize(loss,xk,method='BFGS',jac=grad,callback=callback,options=options)
-sol=basinhopping(loss, xk,niter=5,stepsize=10.0,\
-                 minimizer_kwargs=None,callback=None,disp=True)
+options={'maxiter':10000}    
+sol=minimize(loss,xk,method='BFGS',jac=grad,callback=callback,options=options)
+#sol=basinhopping(loss, xk,niter=10,stepsize=1.0,T=1.0,\
+#                 accept_test=accept_test,\
+#                 minimizer_kwargs=kwargsbasin,callback=None,disp=True)
 print('success',sol.success)
 print(sol.message)
 print('loss',loss(sol.x))

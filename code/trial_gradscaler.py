@@ -17,10 +17,9 @@ import numpy as np
 import pytorch_soo as soo
 from pytorch_soo.line_search_spec import LineSearchSpec
 import matplotlib.pyplot as plt
-import sa
 
 
-n = 10
+n = 20
 nd = n**2
 x = torch.linspace(-1., 1., n).double()
 y = torch.linspace(-1., 1., n).double()
@@ -95,10 +94,11 @@ for i in f5:
         A[i,j]=laplace_rbf(xcoord[i],xcoord[j])
         z[i]=-1000.0        
         
-#AT=torch.t(A)
+AT=torch.t(A)
+
 torch.manual_seed(777)  
 
-#lam=1.0
+lam=1.0e-6
 #A=A+torch.eye(nd,nd)*lam
 
 def model(x,p):
@@ -110,7 +110,7 @@ def model(x,p):
         
 def loss(p,*args):
     ibatch=args[0]
-    ybatch=0.0
+    ybatch=lam*torch.norm(p)**2
     for i in ibatch:
         ybatch+=0.5*(torch.dot(A[i,:],p)-z[i])**2
     return ybatch
@@ -118,7 +118,7 @@ def loss(p,*args):
 def grad(p,*args):
    ibatch=args[0]
    with torch.no_grad():
-       gradbatch = torch.zeros_like(p)
+       gradbatch = 2.0*lam*p
        for i in ibatch:
            gradbatch+=(torch.dot(A[i,:],p)-z[i])*A[i,:]
    return gradbatch   
@@ -132,8 +132,8 @@ p = (b-a)*p+a
 
 
 # Definir el optimizador
-optimizer = optim.LBFGS([p],lr=0.01,history_size=100,max_iter=10,\
- max_eval=40,line_search_fn=None )
+optimizer = optim.LBFGS([p],lr=1.0,history_size=100,max_iter=10,\
+ max_eval=40,line_search_fn='strong_wolfe' )
 #optimizer = soo.HFCR_Newton([p],max_cr=50,max_newton=50)
 #optimizer = optim.NAdam([p],lr=0.1)
 
@@ -148,7 +148,7 @@ def closure():
     return loss_val
 
 # Ciclo de entrenamiento
-max_iter = 100
+max_iter = 10000
 batch_size =100
 
 arr=torch.randperm(nd)
