@@ -1,0 +1,760 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage[T1]{fontenc}
+\usepackage[margin=2.7cm]{geometry}
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{fancyhdr}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+\usepackage{caption}
+\usepackage{enumitem}
+
+\renewcommand{\arraystretch}{1.15}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{RBF multicu\'adrico con distancia de Gower aplicado a biochar}
+\fancyhead[R]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\Phimat}{\boldsymbol{\Phi}}
+\newcommand{\wvec}{\mathbf{w}}
+\newcommand{\yvec}{\mathbf{y}}
+
+\title{\Large \textbf{Aplicaci\'on del modelo RBF multicu\'adrico a datos reales
+de pir\'olisis catal\'itica de biochar: \\
+depuraci\'on del dataset, extensi\'on a variables mixtas mediante \\
+distancia de Gower, y resultados para H\textsubscript{2}}}
+
+\author{Informe t\'ecnico}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+\noindent
+Este informe documenta la aplicaci\'on del modelo de aproximaci\'on RBF
+multicu\'adrico con selecci\'on \emph{greedy} de centros y b\'usqueda de
+hiperpar\'ametros por Latin Hypercube Sampling (desarrollado y validado
+previamente sobre datos sint\'eticos) a un conjunto de datos experimentales
+reales de pir\'olisis catal\'itica de biochar. Se documentan: (i) el proceso
+de depuraci\'on y reorganizaci\'on del dataset original, incluyendo varios
+hallazgos relevantes sobre la naturaleza real de las variables (una variable
+de entrada no documentada inicialmente, una colinealidad perfecta entre dos
+columnas, y la identificaci\'on de tres columnas que result\'aron ser
+variables de salida en lugar de entrada); (ii) una extensi\'on metodol\'ogica
+necesaria para incorporar dos variables de entrada categ\'oricas (nominales)
+mediante una distancia compuesta an\'aloga al coeficiente de similitud de
+Gower (Gower, 1971); y (iii) los resultados de aplicar el modelo extendido a
+la predicci\'on de la fracci\'on molar de H\textsubscript{2} en el gas de
+s\'intesis. Se cierra con una discusi\'on sobre la sensibilidad observada de
+los hiperpar\'ametros del modelo frente a la notable estabilidad del
+RMSE-LOOCV resultante, conectada con resultados an\'alogos --aunque en un
+contexto metodol\'ogicamente distinto-- de la literatura de colocaci\'on RBF
+para ecuaciones diferenciales parciales.
+\end{abstract}
+
+\tableofcontents
+
+% =====================================================================
+\section{Introducci\'on}
+% =====================================================================
+
+En un trabajo previo se dise\~n\'o, implement\'o y valid\'o (sobre datos
+sint\'eticos con estructura controlada) un modelo de aproximaci\'on mediante
+funciones de base radial (RBF) con n\'ucleo multicu\'adrico
+$\phi(r)=\sqrt{r^2+c^2}$, incorporando: estandarizaci\'on de variables,
+regularizaci\'on de Tikhonov, selecci\'on \emph{greedy} de centros guiada por
+validaci\'on cruzada \emph{leave-one-out} (LOOCV) calculada de forma
+anal\'itica mediante la f\'ormula de Rippa/Allen, y b\'usqueda de
+hiperpar\'ametros mediante Latin Hypercube Sampling (LHS) en lugar de una
+grilla regular.
+
+Este informe documenta la primera aplicaci\'on de ese modelo a un conjunto de
+datos experimentales reales: un ensayo de pir\'olisis catal\'itica de
+biochar, con $N=83$ observaciones. A diferencia del caso sint\'etico
+original --en el que las cinco variables independientes eran continuas--
+este dataset incluye dos variables de entrada \textbf{categ\'oricas}
+(nominales, sin orden): el origen de la biomasa y el tipo de catalizador.
+Esto oblig\'o a una extensi\'on metodol\'ogica del modelo, documentada en la
+Secci\'on~\ref{sec:gower}.
+
+Antes de llegar a esa extensi\'on, sin embargo, una parte sustancial del
+trabajo consisti\'o en depurar y reinterpretar correctamente el dataset
+original, cuya estructura conten\'ia varias ambig\"uedades no triviales.
+Esa depuraci\'on se documenta en la Secci\'on~\ref{sec:dataset}, porque
+varias de sus conclusiones determinan directamente c\'omo se plante\'o el
+problema de modelado.
+
+% =====================================================================
+\section{El dataset original: estructura y hallazgos del an\'alisis exploratorio}
+\label{sec:dataset}
+% =====================================================================
+
+\subsection{Estructura del archivo entregado}
+
+El archivo original (\texttt{05\_Raw\_Original\_Dataset\_Reference.xlsx})
+conten\'ia 83 filas y 15 columnas, agrupadas por el propio archivo en tres
+encabezados: \emph{``ENTRADAS''} (ORIGEN, CAT, CARGA\,\%, TR, N2),
+\emph{``OBTENIDAS POR MEDICI\'ON Y TGA''} (PERDIDA AL FUEGO, \% S\'olido,
+CENIZA), y \emph{``SALIDAS''} (T, H2, CO, CH4, CO2, H2/CO, PERDIDA+CENIZA).
+El usuario indic\'o inicialmente que las variables independientes eran
+ORIGEN, CAT, TR, N2, PERDIDA AL FUEGO, \%S\'olido, CENIZA y T (esta \'ultima
+mal etiquetada como ``salida'' en el archivo original), y que las variables
+dependientes eran H2, CO, CH4 y CO2.
+
+\subsection{Dise\~no experimental subyacente}
+
+El an\'alisis exploratorio revel\'o un dise\~no experimental balanceado:
+ORIGEN (amazonas/cimitarra/maceo) y CAT (CaO/MgO/No CAT) forman una grilla
+$3\times3=9$ combinaciones, cada una con 9--10 r\'eplicas (Tabla~\ref{tab:diseno}).
+Adem\'as, T y TR resultaron tomar \'unicamente 3 valores discretos cada una
+(400/600/800\,°C y 0.25/0.5/1.0, respectivamente) por dise\~no experimental,
+mientras que N2 y CARGA\,\% var\'ian de forma m\'as continua.
+
+\begin{table}[htbp]
+\centering
+\caption{Combinaciones ORIGEN $\times$ CAT y n\'umero de r\'eplicas.}
+\label{tab:diseno}
+\begin{tabular}{@{}llr@{}}
+\toprule
+ORIGEN & CAT & n \\
+\midrule
+amazonas & CaO & 9 \\
+amazonas & MgO & 9 \\
+amazonas & No CAT & 9 \\
+cimitarra & CaO & 10 \\
+cimitarra & MgO & 9 \\
+cimitarra & No CAT & 9 \\
+maceo & CaO & 10 \\
+maceo & MgO & 9 \\
+maceo & No CAT & 9 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Hallazgo 1: una variable de entrada no documentada}
+
+La columna \texttt{CARGA\,\%} (valores 0, 0.05, 0.10) apareci\'o en el
+archivo sin haber sido mencionada como variable independiente. Un detalle
+llam\'o la atenci\'on: incluso las filas con \texttt{CAT="No CAT"} (sin
+catalizador) presentaban \texttt{CARGA\,\%}$>0$ en algunos casos --es decir,
+no se trata simplemente de la fracci\'on de catalizador cargado, que ser\'ia
+id\'enticamente cero sin catalizador. Consultado el usuario, se confirm\'o
+que \texttt{CARGA\,\%} es, en efecto, una variable de entrada leg\'itima
+adicional, independiente de la anterior duda.
+
+\subsection{Hallazgo 2: colinealidad perfecta entre dos columnas}
+
+Se encontr\'o que \texttt{CENIZA} + \texttt{PERDIDA AL FUEGO} $= 1$ de forma
+\textbf{exacta} en las 83 filas (correlaci\'on $=-1.000$; diferencia m\'axima
+respecto a la columna de referencia \texttt{PERDIDA+CENIZA}, que result\'o
+ser id\'enticamente 1, fue cero a precisi\'on de m\'aquina). Ambas columnas
+codifican, por tanto, la misma informaci\'on: una es uno menos la otra. Se
+decidi\'o retener \'unicamente \texttt{CENIZA} como variable independiente
+(en el sentido estad\'istico, no de entrada del modelo -- ver
+Hallazgo~4) junto con \texttt{\% S\'olido}, descartando \texttt{PERDIDA AL
+FUEGO} por ser enteramente redundante.
+
+\subsection{Hallazgo 3: columnas puramente derivadas}
+
+Se verific\'o que \texttt{H2/CO} $=$ H2 $\div$ CO exactamente (diferencia
+m\'axima $=0$) y que \texttt{PERDIDA+CENIZA} $=$ PERDIDA AL FUEGO $+$ CENIZA
+exactamente. Ambas son columnas de referencia calculadas a partir de otras ya
+presentes en la tabla, sin informaci\'on independiente: no se usan como
+entrada ni como salida separada del modelo.
+
+\subsection{Hallazgo 4 (el m\'as relevante): tres columnas son en realidad SALIDAS}
+\label{subsec:hallazgo4}
+
+El agrupamiento del propio archivo original ya suger\'ia algo: PERDIDA AL
+FUEGO, \% S\'olido y CENIZA no estaban bajo el encabezado ``ENTRADAS'', sino
+bajo un encabezado separado, ``OBTENIDAS POR MEDICI\'ON Y TGA''. Un
+an\'alisis de correlaci\'on aport\'o evidencia estad\'istica concreta:
+\texttt{\% S\'olido} correlaciona con \texttt{T} en $r=-0.60$ (bastante
+fuerte). Esa correlaci\'on tiene una explicaci\'on f\'isica inmediata
+\textbf{solo} si \texttt{\% S\'olido} es el rendimiento de s\'olido/biochar
+de \emph{ese} experimento (a mayor temperatura de pir\'olisis, m\'as
+devolatilizaci\'on, menos s\'olido remanente) -- un fen\'omeno bien conocido
+en pir\'olisis. Si, en cambio, \texttt{\% S\'olido} fuera una caracterizaci\'on
+de la biomasa \emph{cruda} (antes de cualquier tratamiento t\'ermico), no
+habr\'ia raz\'on para que correlacionara con la temperatura del proceso.
+
+Puesto en conocimiento de esta evidencia, el usuario confirm\'o: PERDIDA AL
+FUEGO, \% S\'olido y CENIZA se miden \textbf{despu\'es} de la pir\'olisis --
+caracterizan el s\'olido/biochar resultante, no la biomasa de partida. Son,
+por tanto, variables de \textbf{salida}, no de entrada. Usarlas como entrada
+para predecir la composici\'on de gas habr\'ia sido una fuga de informaci\'on
+(usar el resultado de un experimento para ``predecir'' otro resultado del
+mismo experimento), adem\'as de inutilizable en la pr\'actica: esas
+caracter\'isticas no se conocen antes de correr el experimento.
+
+Esta correcci\'on cambia sustancialmente el problema de modelado: en lugar de
+4 variables de salida (los gases) y 8 de entrada, el problema qued\'o
+planteado con \textbf{6 variables de entrada} y \textbf{7 columnas de
+salida} (con redundancia entre dos de ellas, ver Hallazgo~2).
+
+\subsection{Hallazgo 5: los cuatro gases son un dato composicional}
+
+Se verific\'o que H2+CO+CH4+CO2 $=1$ exactamente en las 83 filas (desviaci\'on
+est\'andar del orden de $10^{-17}$, es decir, precisi\'on de m\'aquina). Los
+cuatro gases no son cuatro variables independientes sino una composici\'on
+con 3 grados de libertad: conocidos tres de los cuatro valores, el cuarto
+queda determinado exactamente. Esto tiene una consecuencia directa sobre la
+estrategia de modelado, discutida en la Secci\'on~\ref{subsec:composicional}.
+
+\subsection{Reorganizaci\'on del dataset}
+
+Con base en estos hallazgos, se entreg\'o al usuario un archivo Excel
+reorganizado (\texttt{dataset\_biochar\_reorganizado.xlsx}) con las columnas
+agrupadas y coloreadas por bloque (entradas; salidas -- gas; salidas --
+s\'olido; referencia/derivadas), columnas de verificaci\'on calculadas por
+f\'ormula (nunca valores fijos) confirmando ambas restricciones exactas
+encontradas, y comentarios document\'ando cada decisi\'on metodol\'ogica
+directamente en los encabezados correspondientes.
+
+% =====================================================================
+\section{Reformulaci\'on del problema de modelado}
+\label{sec:reformulacion}
+% =====================================================================
+
+\subsection{Variables de entrada (6)}
+
+\begin{itemize}[nosep]
+    \item \textbf{ORIGEN} -- categ\'orica, 3 niveles (amazonas, cimitarra, maceo)
+    \item \textbf{CAT} -- categ\'orica, 3 niveles (CaO, MgO, No CAT)
+    \item \textbf{CARGA\,\%}, \textbf{TR}, \textbf{N2}, \textbf{T} -- continuas
+\end{itemize}
+
+\subsection{Variables de salida y estrategia composicional}
+\label{subsec:composicional}
+
+De las 7 columnas de salida disponibles (H2, CO, CH4, CO2, CENIZA, \%
+S\'olido, PERDIDA AL FUEGO), se descarta PERDIDA AL FUEGO por redundante
+(Hallazgo~2), quedando 6 columnas de las cuales 5 son independientes: 3
+grados de libertad en los gases (Hallazgo~5) m\'as CENIZA y \% S\'olido.
+
+Para los gases, se opt\'o por modelar 3 de los 4 directamente v\'ia RBF y
+derivar el cuarto por resta ($z_4 = 1-z_1-z_2-z_3$), garantizando as\'i que
+cualquier predicci\'on nueva satisfaga exactamente la restricci\'on
+composicional --a diferencia de modelar los 4 independientemente y
+normalizar al final, o de una transformaci\'on log-ratio (Aitchison), que
+se descartaron por mayor complejidad de implementaci\'on e interpretaci\'on
+sin una ganancia clara para este caso.
+
+\subsubsection{Qu\'e gas derivar}
+
+Para decidir cu\'al de los cuatro gases conviene derivar (en lugar de
+modelar directamente), se realiz\'o un diagn\'ostico r\'apido: regresi\'on
+lineal m\'ultiple (entradas continuas estandarizadas + categ\'oricas
+\emph{one-hot}) con validaci\'on cruzada de 5 particiones, como proxy
+econ\'omico de qu\'e tan predecible es cada gas desde las entradas
+(Tabla~\ref{tab:diagnostico_gases}).
+
+\begin{table}[htbp]
+\centering
+\caption{Diagn\'ostico de predictibilidad lineal (proxy) por gas.}
+\label{tab:diagnostico_gases}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+Gas & $R^2$ CV (lineal) & Rango & Desv. est\'andar \\
+\midrule
+H2  & 0.925 & 0.009--0.378 & 0.116 \\
+CO2 & 0.828 & 0.044--0.551 & 0.131 \\
+CH4 & 0.596 & 0.192--0.428 & 0.045 \\
+CO  & \textbf{0.367} & 0.100--0.371 & 0.061 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+CO result\'o, por amplio margen, el m\'as dif\'icil de explicar linealmente
+desde las entradas disponibles. Se decidi\'o modelar H2, CH4 y CO2
+directamente v\'ia RBF, y derivar CO $=1-$H2$-$CH4$-$CO2. El razonamiento es
+doble: (i) al ser CO el m\'as ruidoso/dif\'icil de ajustar directamente,
+derivarlo aprovecha la restricci\'on de cierre composicional para
+``corregirlo'' con la informaci\'on de los otros tres, en lugar de depender
+de un ajuste directo potencialmente inestable; (ii) el radio H2/CO, de
+inter\'es pr\'actico seg\'un el archivo original, sigue siendo perfectamente
+calculable con el CO derivado. Se advierte, no obstante, que este
+diagn\'ostico usa un modelo \textbf{lineal}; una vez el RBF (no lineal) est\'e
+ajustado sobre los 4 gases, conviene revisar emp\'iricamente si esta elecci\'on
+se mantiene.
+
+Quedan, en definitiva, \textbf{5 modelos RBF independientes} por ajustar:
+H2, CH4, CO2, CENIZA y \% S\'olido. Este informe documenta el primero de
+ellos (H2) en detalle, como plantilla para los restantes.
+
+% =====================================================================
+\section{Extensi\'on metodol\'ogica: distancia mixta tipo Gower}
+\label{sec:gower}
+% =====================================================================
+
+\subsection{El problema: dos entradas son categ\'oricas}
+
+Todo el modelo RBF descansa en una distancia eucl\'idea
+$r=\lVert\mathbf x-\mathbf x'\rVert$ con sentido f\'isico: dos valores de
+temperatura cercanos (p.ej. 450\,°C y 500\,°C) deben producir una $r$ chica.
+ORIGEN y CAT son variables \textbf{nominales}: no existe ning\'un sentido en
+el que ``zeolita'' est\'e m\'as cerca de un catalizador que de otro. Codificar
+las categor\'ias como enteros arbitrarios (CaO$=1$, MgO$=2$, No CAT$=3$) le
+impondr\'ia al modelo una estructura ordinal inexistente --el modelo
+``creer\'ia'' que el catalizador 1 est\'a m\'as cerca del 2 que del 3, sin que
+eso signifique nada.
+
+\subsection{El coeficiente de similitud de Gower}
+
+Gower (1971) \cite{gower1971} propuso un coeficiente general de similitud
+para conjuntos de datos con variables de tipo mixto (continuas, ordinales,
+binarias y nominales), pensado originalmente para taxonom\'ia num\'erica.
+Su idea central es promediar, sobre las $p$ variables disponibles, una
+disimilitud calculada variable por variable:
+\[
+d(\mathbf x, \mathbf x') = \frac{1}{p}\sum_{k=1}^{p} d_k(x_k, x_k'),
+\]
+donde $d_k$ se define seg\'un el tipo de la variable $k$:
+\begin{itemize}[nosep]
+    \item Si $k$ es continua: $d_k(x_k,x_k') = |x_k-x_k'|/R_k$, con $R_k$ el
+    rango observado de la variable (normalizaci\'on a $[0,1]$).
+    \item Si $k$ es nominal (nuestro caso): $d_k(x_k,x_k')=0$ si
+    $x_k=x_k'$, y $1$ en caso contrario (``\emph{simple matching}'').
+\end{itemize}
+Gower demostr\'o que la matriz de similitudes resultante es semidefinida
+positiva (salvo, posiblemente, en presencia de datos faltantes), lo cual es
+relevante porque garantiza que $d$ admite una representaci\'on eucl\'idea
+--una propiedad deseable para cualquier distancia que se use dentro de un
+n\'ucleo como el multicu\'adrico. Esta construcci\'on es, hoy, el punto de
+partida est\'andar en la literatura de an\'alisis de conglomerados y
+similitud para datos de tipo mixto \cite{gower1986}.
+
+\subsection{Adaptaci\'on al n\'ucleo multicu\'adrico}
+
+La multicu\'adrica $\phi(r)=\sqrt{r^2+c^2}$ requiere una distancia (o,
+equivalentemente, una distancia \emph{al cuadrado} $r^2$, que es la cantidad
+que efectivamente se necesita para evaluar $\phi$). Se adapta la idea de
+Gower --separar la disimilitud por bloques de variables, seg\'un su tipo--
+pero en la versi\'on ``distancia al cuadrado'' (para insertarla directamente
+en el n\'ucleo) y reemplazando el promedio con pesos fijos $1/p$ por
+\textbf{pesos ajustables} $w_m$, uno por cada variable categ\'orica, tratados
+como hiperpar\'ametros del modelo:
+\[
+\boxed{\;
+r^2(\mathbf x,\mathbf x') \;=\; \underbrace{\lVert \tilde{\mathbf x}_{\text{cont}}
+- \tilde{\mathbf x}'_{\text{cont}}\rVert^2}_{\text{bloque continuo, z-score}}
+\;+\; \sum_{m=1}^{k} w_m \cdot \mathbb{1}\!\left[\,\text{cat}_m \neq \text{cat}_m'\,\right]
+\;}
+\]
+donde $\tilde{\mathbf x}_{\text{cont}}$ es el bloque de variables continuas
+ya estandarizado (igual que en el caso puramente continuo), y la suma corre
+sobre las $k=2$ variables categ\'oricas (ORIGEN, CAT). Si dos puntos
+coinciden en una variable categ\'orica, esa variable no aporta nada a la
+distancia; si no coinciden, aporta exactamente $w_m$ --el peso act\'ua como
+``cu\'anta distancia (en las mismas unidades que el bloque continuo
+estandarizado) representa un cambio de categor\'ia en esa variable''.
+
+A diferencia del coeficiente de Gower original --pensado para medir
+similitud descriptivamente, con pesos fijados de antemano por el analista--
+aqu\'i los pesos $w_m$ se \textbf{aprenden de los datos}, junto con $c$ y
+$\lambda$, minimizando el mismo criterio LOOCV usado para todas las dem\'as
+decisiones estructurales del modelo (ver discusi\'on de los dos niveles de
+funci\'on objetivo en el informe metodol\'ogico previo).
+
+\subsection{Cola polin\'omica extendida}
+
+La cola polin\'omica (Secci\'on~2.2 del informe metodol\'ogico previo) se
+extiende con columnas \emph{dummy} \emph{one-hot} (todas las categor\'ias,
+sin omitir ninguna) de cada variable categ\'orica, adem\'as de la constante y
+los t\'erminos lineales en las variables continuas. Esto permite capturar el
+efecto principal de cada categor\'ia sobre la tendencia global, independiente
+de su rol en la distancia radial.
+
+\subsection{Extensi\'on de la b\'usqueda de hiperpar\'ametros}
+
+Con $k=2$ variables categ\'oricas, el espacio de b\'usqueda pasa de dimensi\'on
+2 ($c,\lambda$) a dimensi\'on $2+k=4$ ($c,\lambda,w_{\text{ORIGEN}},w_{\text{CAT}}$).
+El muestreo mediante Latin Hypercube Sampling (Secci\'on~5 del informe
+metodol\'ogico previo) se generaliza de forma directa a esta dimensi\'on
+mayor --es, de hecho, precisamente en dimensiones m\'as altas donde LHS
+aventaja m\'as claramente a un grid regular (Bergstra \& Bengio, 2012
+\cite{bergstra2012}): un grid con la misma resoluci\'on por eje que en el
+caso 2D requerir\'ia, en dimensi\'on 4, la cuarta potencia de evaluaciones.
+
+% =====================================================================
+\section{Aplicaci\'on a H\textsubscript{2}: refinamiento y resultado final}
+\label{sec:h2}
+% =====================================================================
+
+\subsection{Primera corrida y hiperpar\'ametros pegados al borde}
+
+Una primera corrida exploratoria (rangos $c\in(0.1,10)$, $\lambda\in(10^{-6},1)$,
+$w_m\in(0.01,100)$, 150 puntos LHS) arroj\'o $c=0.156$, $\lambda=2.02\times10^{-6}$
+y $w_{\text{ORIGEN}}=0.023$ --los tres sospechosamente cerca de sus respectivos
+bordes inferiores (posiciones relativas en escala logar\'itmica de 19\,\%,
+5\,\% y 9\,\% del rango, respectivamente). Esto es una se\~nal de alerta
+est\'andar en b\'usqueda de hiperpar\'ametros: si el \'optimo encontrado est\'a
+en el borde del rango explorado, no se puede descartar que el verdadero
+\'optimo est\'e fuera de ese rango.
+
+\subsection{Refinamiento de los rangos}
+
+Se ampliaron los tres rangos hacia los bordes donde se detect\'o el problema,
+y se repiti\'o la b\'usqueda con presupuestos crecientes y semillas distintas,
+para evaluar tanto la posici\'on del \'optimo como la \textbf{estabilidad}
+del resultado entre corridas (Tabla~\ref{tab:refinamiento}).
+
+\begin{table}[htbp]
+\centering
+\caption{Evoluci\'on de la b\'usqueda de hiperpar\'ametros para H2 a trav\'es
+de tres corridas de refinamiento.}
+\label{tab:refinamiento}
+\small
+\begin{tabular}{@{}lrrrrrr@{}}
+\toprule
+Corrida & Presup. & $c$ & $\lambda$ & $w_{\text{ORIGEN}}$ & $w_{\text{CAT}}$ & RMSE-LOOCV \\
+\midrule
+1 (rangos iniciales)     & 150 & 0.156  & $2.0\times10^{-6}$ & 0.023 & 9.33 & 0.01712 \\
+2 (rangos ampliados)     & 400 & 0.043  & 0.356              & 5.38  & 6.90 & 0.01688 \\
+3 (rangos amp., semilla distinta) & 300 & 0.064  & 0.312     & 1.28  & 4.50 & 0.01690 \\
+4 (final, mayor presupuesto)      & 500 & 0.081  & 0.324     & 1.28  & 5.00 & 0.01698 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Dos observaciones destacan de la Tabla~\ref{tab:refinamiento}. Primero,
+$\lambda$ se estabiliz\'o alrededor de $0.3$ en las corridas 2--4 (tras
+ampliar su rango hacia arriba), confirmando que su valor inicial cercano al
+borde era, efectivamente, un artefacto de un rango demasiado angosto y no un
+\'optimo genuino en el l\'imite. Segundo --y m\'as notable--, \textbf{los
+hiperpar\'ametros var\'ian sustancialmente entre las corridas 2, 3 y 4 (p.ej.
+$w_{\text{ORIGEN}}$ entre 1.28 y 5.38), mientras que el RMSE-LOOCV resultante
+permanece casi id\'entico} (0.01688--0.01698, una variaci\'on menor al 1\,\%).
+Esta observaci\'on se retoma con detalle en la Secci\'on~\ref{sec:discusion}.
+
+\subsection{Modelo final}
+
+Se adopt\'o como definitivo el resultado de la corrida 4 (mayor presupuesto,
+500 puntos LHS): $c=0.0806$, $\lambda=0.324$, $w_{\text{ORIGEN}}=1.28$,
+$w_{\text{CAT}}=5.00$, con 29 centros de los 83 candidatos disponibles.
+RMSE-LOOCV$=0.0170$; RMSE-entrenamiento$=0.0120$; $R^2$(entrenamiento)$=0.989$.
+Dado que $\text{std}(\text{H2})=0.116$, el RMSE-LOOCV implica
+$R^2_{\text{LOOCV}}\approx 1-(0.0170/0.116)^2\approx 0.979$: el modelo
+explica cerca del 98\,\% de la varianza de H2 en validaci\'on cruzada
+\emph{leave-one-out}, sensiblemente mejor que el 92.5\,\% del diagn\'ostico
+lineal preliminar (Tabla~\ref{tab:diagnostico_gases}), lo cual sugiere que el
+RBF est\'a capturando estructura genuinamente no lineal.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.92\textwidth]{figs/diagnosticos_H2.png}
+    \caption{Diagn\'osticos del modelo final para H2: convergencia del
+    RMSE-LOOCV durante la selecci\'on greedy (arriba-izq.), predicho vs.
+    observado (arriba-der.), residuos vs. predicho (abajo-izq.) y
+    distribuci\'on de residuos (abajo-der.).}
+    \label{fig:diag_h2}
+\end{figure}
+
+La Figura~\ref{fig:diag_h2} muestra los diagn\'osticos usuales: convergencia
+suave del greedy (deteni\'endose en 29 centros), ajuste muy cercano a la
+diagonal en el panel predicho-vs-real, y residuos sin un patr\'on sistem\'atico
+fuerte (posiblemente una leve heterocedasticidad, con algo m\'as de dispersi\'on
+en el rango medio de predicci\'on).
+
+\subsection{Dependencia parcial e interpretaci\'on fisicoqu\'imica}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{figs/dependencia_parcial_H2_continuas.png}
+    \caption{Efecto de cada variable continua sobre H2 predicho, estratificado
+    por tipo de catalizador (ORIGEN fijo en la categor\'ia m\'as frecuente,
+    dem\'as variables continuas en su media muestral).}
+    \label{fig:pd_cont}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.75\textwidth]{figs/dependencia_parcial_H2_categoricas.png}
+    \caption{Efecto principal de ORIGEN y CAT sobre H2 predicho (resto de
+    variables en su valor de referencia/media).}
+    \label{fig:pd_cat}
+\end{figure}
+
+Dado que $w_{\text{CAT}}$ domina consistentemente sobre $w_{\text{ORIGEN}}$
+en todas las corridas de la Tabla~\ref{tab:refinamiento}, las curvas de
+dependencia parcial de las variables continuas se estratificaron por CAT
+(Figura~\ref{fig:pd_cont}). Los resultados son f\'isicoqu\'imicamente
+coherentes:
+
+\begin{itemize}
+    \item \textbf{La temperatura (T) domina el comportamiento}: H2 predicho
+    sube de $\sim$0.10 a 400\,°C hasta $\sim$0.35--0.42 a 800\,°C, con
+    diferencia el efecto m\'as fuerte de las seis entradas. Es consistente
+    con el craqueo secundario y las reacciones de reformado que se
+    intensifican a mayor temperatura de pir\'olisis.
+    \item \textbf{CaO $>$ MgO $>$ No CAT}, de forma consistente en todo el
+    rango de T. Coincide con la qu\'imica esperada: el CaO es conocido por
+    promover reacciones de \emph{water-gas-shift} y reformado
+    intensificado por sorci\'on (captura de CO2 como CaCO$_3$, desplazando
+    el equilibrio hacia m\'as H2), un mecanismo bien documentado en
+    pir\'olisis catal\'itica de biomasa.
+    \item CARGA\,\%, TR y N2 muestran efectos mucho m\'as discretos que T.
+    \item El efecto principal de ORIGEN result\'o de magnitud comparable al
+    de CAT en el gr\'afico de barras (Figura~\ref{fig:pd_cat}, rango
+    $\sim$0.22--0.28 para ambas variables) --pese a que los pesos
+    $w_{\text{ORIGEN}}$ y $w_{\text{CAT}}$ tomaron valores bastante distintos
+    entre corridas (Tabla~\ref{tab:refinamiento}). Esto refuerza que los
+    pesos categ\'oricos individuales no son muy identificables con $N=83$
+    (superficie plana en esa direcci\'on del espacio de hiperpar\'ametros),
+    pero las \emph{predicciones} del modelo final son consistentes.
+\end{itemize}
+
+Que el modelo recupere, sin haber sido guiado expl\'icitamente hacia ello,
+un ordenamiento CaO $>$ MgO $>$ No CAT consistente con la literatura de
+pir\'olisis catal\'itica es la mejor validaci\'on cualitativa disponible en
+esta etapa: sugiere que el RBF est\'a aprendiendo estructura f\'isica real,
+no ruido.
+
+% =====================================================================
+\section{Discusi\'on: sensibilidad de hiperpar\'ametros vs.\ estabilidad del LOOCV}
+\label{sec:discusion}
+% =====================================================================
+
+\subsection{La observaci\'on emp\'irica}
+
+La Tabla~\ref{tab:refinamiento} documenta un patr\'on que merece discusi\'on
+expl\'icita: entre las corridas 2, 3 y 4, los hiperpar\'ametros individuales
+--particularmente $c$ (var\'ia por un factor $\sim$2) y $w_{\text{ORIGEN}}$
+(var\'ia por un factor $>4$)-- cambian de forma sustancial seg\'un la
+semilla y el presupuesto de b\'usqueda usados, mientras que el
+RMSE-LOOCV resultante permanece pr\'acticamente constante (dentro de un
+0.6\,\% de variaci\'on). Esto sugiere que la superficie de RMSE-LOOCV en
+funci\'on de $(c,\lambda,w_{\text{ORIGEN}},w_{\text{CAT}})$ es, en una
+regi\'on amplia del espacio de b\'usqueda, relativamente \textbf{plana}:
+muchas combinaciones distintas de hiperpar\'ametros producen un desempe\~no
+predictivo casi id\'entico.
+
+\subsection{Conexi\'on con la literatura de colocaci\'on RBF para EDPs}
+
+Esta observaci\'on resuena con una discusi\'on de larga data en la
+literatura de m\'etodos RBF de colocaci\'on para ecuaciones diferenciales
+parciales (EDPs) --un uso de las funciones de base radial metodol\'ogicamente
+distinto al de este trabajo (colocaci\'on/interpolaci\'on de una EDP, en
+lugar de aproximaci\'on regularizada de datos ruidosos), pero que comparte
+el mismo n\'ucleo matem\'atico y, por tanto, los mismos hiperpar\'ametros de
+forma. Kansa (1990) \cite{kansa1990a,kansa1990b} introdujo el uso de la
+multicu\'adrica para resolver EDPs por colocaci\'on directa (el llamado
+\emph{m\'etodo de Kansa}), notando desde entonces que el par\'ametro de
+forma $c$ afecta fuertemente tanto la precisi\'on como el n\'umero de
+condici\'on del sistema lineal resultante.
+
+Schaback (1995) \cite{schaback1995} formaliz\'o esta tensi\'on como un
+\emph{``principio de incertidumbre''}: en el m\'etodo directo de resoluci\'on
+del sistema RBF (RBF-Direct), no es posible mejorar la precisi\'on
+(t\'ipicamente lograda con par\'ametros de forma m\'as chicos, es decir,
+n\'ucleos m\'as ``planos'') sin empeorar simult\'aneamente el n\'umero de
+condici\'on de la matriz de interpolaci\'on. Sin embargo, trabajos
+posteriores (Fornberg y Wright, y Wright y Fornberg, 2017
+\cite{wright2017}) mostraron que este mal condicionamiento es un
+\textbf{artefacto del algoritmo de resoluci\'on directo}, no una limitaci\'on
+fundamental de la interpolaci\'on RBF en s\'i: m\'etodos alternativos y
+num\'ericamente estables (RBF-QR, Contour-Pad\'e, RBF-GA) permiten evaluar
+el interpolante para \emph{cualquier} valor del par\'ametro de forma,
+incluido el l\'imite ``plano'' ($c\to\infty$ en la parametrizaci\'on de este
+informe), sin la explosi\'on del n\'umero de condici\'on que sufre el
+m\'etodo directo. Kansa y Carlson (1992) \cite{kansa1992} exploraron adem\'as
+el uso de par\'ametros de forma \textbf{variables} (distintos por centro), en
+lugar de un \'unico valor global, encontrando mejoras de precisi\'on
+adicionales.
+
+\subsection{El comentario del usuario: experiencia previa en colocaci\'on RBF para EDPs}
+
+El usuario aport\'o, a partir de su propia experiencia previa aplicando
+colocaci\'on RBF a la soluci\'on de EDPs, una observaci\'on directamente
+relevante: en ese contexto (interpolaci\'on/colocaci\'on, no aproximaci\'on de
+datos ruidosos), la literatura muestra que los hiperpar\'ametros del n\'ucleo
+($c$, y por extensi\'on otros par\'ametros de escala) no son especialmente
+determinantes para la precisi\'on final de la soluci\'on, siempre que se
+manejen dentro de rangos razonablemente amplios; la precisi\'on de la
+soluci\'on est\'a gobernada, principalmente, por el \textbf{n\'umero de
+centros (nodos)} usados para discretizar el dominio.
+
+Esta observaci\'on es coherente con un resultado bien establecido en la
+teor\'ia de aproximaci\'on de funciones mediante RBF: la convergencia del
+interpolante, a medida que aumenta la densidad de centros (equivalentemente,
+a medida que la distancia de llenado o \emph{fill distance} $h\to0$), est\'a
+gobernada principalmente por la suavidad del n\'ucleo y por $h$, mientras que
+el par\'ametro de forma afecta la \textbf{constante} y el \textbf{r\'egimen
+num\'erico} (condicionamiento) de esa convergencia, pero no su existencia
+\cite{wendland2005,fasshauer2007}. En otras palabras: dado un n\'umero
+suficiente de nodos bien distribuidos, existe t\'ipicamente un rango amplio
+de valores de $c$ que producen una precisi\'on comparable y cercana al
+\'optimo; el verdadero cuello de botella para la precisi\'on es cu\'antos
+nodos se usan y c\'omo est\'an distribuidos, no el valor preciso de $c$
+dentro de ese rango razonable.
+
+\subsection{S\'intesis y diferencias importantes a se\~nalar}
+
+La observaci\'on emp\'irica de la Secci\'on~\ref{sec:discusion} (variaci\'on
+sustancial de hiperpar\'ametros con RMSE-LOOCV casi constante) es, en
+esp\'iritu, consistente con esta literatura: en ambos casos, una vez que el
+n\'ucleo opera en un r\'egimen num\'ericamente razonable, el resultado final
+es relativamente insensible al valor preciso de los hiperpar\'ametros de
+forma, y lo que realmente gobierna la calidad del resultado es la asignaci\'on
+de centros/nodos.
+
+Conviene, sin embargo, se\~nalar dos diferencias metodol\'ogicas que
+limitan la extensi\'on directa de esta analog\'ia:
+
+\begin{enumerate}
+    \item \textbf{Interpolaci\'on/colocaci\'on vs.\ aproximaci\'on
+    regularizada de datos ruidosos.} En colocaci\'on de EDPs, $N$ (el n\'umero
+    de nodos) es una elecci\'on de dise\~no del usuario, libremente
+    incrementable como parte de un refinamiento de malla, y la convergencia
+    se estudia expl\'icitamente como funci\'on de $N\to\infty$. En este
+    trabajo, $N=83$ es fijo (proviene de un ensayo experimental, no se puede
+    ``agregar m\'as nodos'' a voluntad), y el n\'umero de centros efectivamente
+    usados por el modelo no es una elecci\'on libre del usuario sino el
+    resultado del criterio de parada temprana del Algoritmo greedy guiado
+    por LOOCV (Secci\'on~2.8 del informe metodol\'ogico previo). La
+    ``regulaci\'on por n\'umero de centros'' que menciona la literatura de
+    EDPs ocurre aqu\'i de forma \textbf{autom\'atica} v\'ia ese criterio, no
+    como un par\'ametro de refinamiento que se ajuste directamente.
+
+    \item \textbf{Ruido.} La colocaci\'on de EDPs t\'ipicamente opera sobre
+    datos exactos (la propia EDP y sus condiciones de frontera); aqu\'i los
+    datos son observaciones experimentales ruidosas, y la regularizaci\'on
+    $\lambda$ juega un rol adicional (controlar sobreajuste al ruido) que no
+    tiene un an\'alogo directo en colocaci\'on pura.
+\end{enumerate}
+
+A pesar de estas diferencias, la convergencia cualitativa de ambas l\'ineas
+de evidencia --la de este trabajo y la de la literatura de EDPs citada por
+el usuario-- resulta \'util como una segunda validaci\'on, independiente del
+diagn\'ostico fisicoqu\'imico de la Secci\'on~\ref{sec:h2}, de que el
+comportamiento observado (baja sensibilidad de los hiperpar\'ametros de
+forma, en un r\'egimen num\'ericamente razonable) no es un artefacto
+espec\'ifico de este dataset, sino una propiedad m\'as general de los
+m\'etodos RBF.
+
+% =====================================================================
+\section{Limitaciones y pr\'oximos pasos}
+% =====================================================================
+
+\begin{itemize}
+    \item El diagn\'ostico de qu\'e gas derivar (Secci\'on~\ref{subsec:composicional})
+    us\'o un modelo lineal; conviene revisarlo una vez ajustados los 3
+    modelos RBF de gases, comparando el error real de CO derivado vs.\ CO
+    modelado directamente.
+    \item Falta replicar el procedimiento completo (b\'usqueda de rangos +
+    ajuste final + diagn\'osticos) para CH4, CO2, CENIZA y \% S\'olido,
+    usando la configuraci\'on de la Secci\'on~\ref{sec:h2} como plantilla.
+    \item La posible correlaci\'on moderada entre TR y N2 ($r=0.81$,
+    reportada en el informe metodol\'ogico previo) no se ha investigado en
+    profundidad en el contexto del dataset real; conviene revisarla al
+    completar los 5 modelos.
+    \item Como se discuti\'o en la Secci\'on~\ref{sec:discusion}, los pesos
+    categ\'oricos individuales no parecen bien identificados con $N=83$; no
+    se recomienda interpretarlos como una medida precisa de ``importancia
+    relativa'' de ORIGEN vs.\ CAT, m\'as all\'a de la conclusi\'on cualitativa
+    de que ambos importan de forma no despreciable.
+\end{itemize}
+
+% =====================================================================
+\section{Conclusiones}
+% =====================================================================
+
+Se aplic\'o exitosamente el modelo RBF multicu\'adrico con selecci\'on
+greedy y b\'usqueda de hiperpar\'ametros por LHS a un dataset experimental
+real de pir\'olisis catal\'itica de biochar, tras un proceso de depuraci\'on
+que revel\'o correcciones sustanciales al planteamiento inicial del problema
+(una variable de entrada no documentada, una colinealidad perfecta, y --lo
+m\'as importante-- la identificaci\'on de tres columnas que en realidad son
+salidas del proceso, no entradas). Se extendi\'o el modelo para incorporar
+variables categ\'oricas mediante una distancia compuesta an\'aloga al
+coeficiente de similitud de Gower (1971), con pesos categ\'oricos ajustados
+como hiperpar\'ametros adicionales v\'ia LHS.
+
+El modelo resultante para H2 alcanza un RMSE-LOOCV de 0.0170
+($R^2_{\text{LOOCV}}\approx0.98$), y --sin haber sido guiado expl\'icitamente
+hacia ello-- recupera un ordenamiento de efecto catal\'itico (CaO $>$ MgO
+$>$ No CAT) consistente con la qu\'imica de pir\'olisis catal\'itica conocida,
+adem\'as de un fuerte efecto de la temperatura consistente con el craqueo
+secundario esperado. La notable estabilidad del RMSE-LOOCV frente a
+variaciones sustanciales en los hiperpar\'ametros individuales, observada
+emp\'iricamente en este trabajo, resuena con hallazgos an\'alogos --aunque en
+un contexto metodol\'ogico distinto-- en la literatura de colocaci\'on RBF
+para ecuaciones diferenciales parciales, donde se ha documentado que, dentro
+de un r\'egimen num\'ericamente razonable, la precisi\'on final est\'a
+gobernada principalmente por el n\'umero y distribuci\'on de los centros, no
+por el valor preciso de los par\'ametros de forma.
+
+% =====================================================================
+\begin{thebibliography}{99}
+
+\bibitem{gower1971}
+Gower, J.\ C.\ (1971).
+\emph{A general coefficient of similarity and some of its properties}.
+Biometrics, 27(4), 857--871.
+
+\bibitem{gower1986}
+Gower, J.\ C., \& Legendre, P.\ (1986).
+\emph{Metric and Euclidean properties of dissimilarity coefficients}.
+Journal of Classification, 3(1), 5--48.
+
+\bibitem{bergstra2012}
+Bergstra, J., \& Bengio, Y.\ (2012).
+\emph{Random search for hyper-parameter optimization}.
+Journal of Machine Learning Research, 13, 281--305.
+
+\bibitem{kansa1990a}
+Kansa, E.\ J.\ (1990).
+\emph{Multiquadrics---A scattered data approximation scheme with
+applications to computational fluid dynamics---I: surface approximations
+and partial derivative estimates}.
+Computers \& Mathematics with Applications, 19(8--9), 127--145.
+
+\bibitem{kansa1990b}
+Kansa, E.\ J.\ (1990).
+\emph{Multiquadrics---A scattered data approximation scheme with
+applications to computational fluid dynamics---II: solutions to parabolic,
+hyperbolic and elliptic partial differential equations}.
+Computers \& Mathematics with Applications, 19(8--9), 147--161.
+
+\bibitem{kansa1992}
+Kansa, E.\ J., \& Carlson, R.\ E.\ (1992).
+\emph{Improved accuracy of multiquadric interpolation using variable shape
+parameters}.
+Computers \& Mathematics with Applications, 24(12), 99--120.
+
+\bibitem{schaback1995}
+Schaback, R.\ (1995).
+\emph{Error estimates and condition numbers for radial basis function
+interpolation}.
+Advances in Computational Mathematics, 3(3), 251--264.
+
+\bibitem{wright2017}
+Wright, G.\ B., \& Fornberg, B.\ (2017).
+\emph{Stable computations with flat radial basis functions using
+vector-valued rational approximations}.
+Journal of Computational Physics, 331, 137--156.
+
+\bibitem{wendland2005}
+Wendland, H.\ (2005).
+\emph{Scattered Data Approximation}.
+Cambridge University Press.
+
+\bibitem{fasshauer2007}
+Fasshauer, G.\ E.\ (2007).
+\emph{Meshfree Approximation Methods with MATLAB}.
+World Scientific.
+
+\end{thebibliography}
+
+\end{document}
